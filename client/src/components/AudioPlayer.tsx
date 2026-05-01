@@ -1,11 +1,11 @@
 interface Props {
-  clipDuration: number;
   onPlay: () => void;
   disabled: boolean;
   isConnecting: boolean;
+  isPlaying: boolean;
 }
 
-export function AudioPlayer({ clipDuration, onPlay, disabled, isConnecting }: Props) {
+export function AudioPlayer({ onPlay, disabled, isConnecting, isPlaying }: Props) {
   if (isConnecting) {
     return (
       <div className="flex flex-col items-center gap-2">
@@ -18,10 +18,10 @@ export function AudioPlayer({ clipDuration, onPlay, disabled, isConnecting }: Pr
   }
 
   return (
-    <div className="flex flex-col items-center gap-2">
+    <div className="flex flex-col items-center">
       <button
         onClick={onPlay}
-        disabled={disabled}
+        disabled={disabled || isPlaying}
         className="w-16 h-16 rounded-full bg-[#1DB954] hover:bg-[#1ed760] disabled:opacity-50 flex items-center justify-center transition-colors"
       >
         <svg
@@ -32,9 +32,6 @@ export function AudioPlayer({ clipDuration, onPlay, disabled, isConnecting }: Pr
           <path d="M8 5v14l11-7z" />
         </svg>
       </button>
-      <span className="text-sm text-gray-400">
-        {(clipDuration / 1000).toFixed(0)}s clip
-      </span>
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useState, useEffect, useRef } from 'react';
 import { useAuthStore } from '../hooks/useAuthStore';
 import { useGameState } from '../hooks/useGameState';
 import { useSpotifyPlayer } from '../hooks/useSpotifyPlayer';
@@ -21,6 +21,44 @@ export function GameBoard({ playlist, onNewPlaylist }: Props) {
   const { isReady, isConnecting, error: playerError, play } = useSpotifyPlayer();
   const { stats, onWin, onLoss } = useStats();
 
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const rafRef = useRef<number | null>(null);
+  const startTimeRef = useRef<number>(0);
+
+  const clipDuration = game.currentClipDuration();
+
+  const stopPlayback = useCallback(() => {
+    if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    rafRef.current = null;
+    setIsPlaying(false);
+    setProgress(0);
+  }, []);
+
+  useEffect(() => {
+    if (!isPlaying) return;
+
+    startTimeRef.current = performance.now();
+
+    const tick = (now: number) => {
+      const elapsed = now - startTimeRef.current;
+      const pct = Math.min(elapsed / clipDuration, 1);
+      setProgress(pct);
+
+      if (pct < 1) {
+        rafRef.current = requestAnimationFrame(tick);
+      } else {
+        stopPlayback();
+      }
+    };
+
+    rafRef.current = requestAnimationFrame(tick);
+
+    return () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    };
+  }, [isPlaying, clipDuration, stopPlayback]);
+
   const handleStartRound = useCallback(async () => {
     if (!accessToken) return;
     const data = await startGame(playlist.id, accessToken);
@@ -28,15 +66,17 @@ export function GameBoard({ playlist, onNewPlaylist }: Props) {
   }, [accessToken, playlist.id]);
 
   const handlePlay = useCallback(() => {
-    if (!game.trackUri) return;
+    if (!game.trackUri || isPlaying) return;
+    setIsPlaying(true);
     play(game.trackUri, game.currentClipDuration());
-  }, [game.trackUri, game.attemptNumber, play]);
+  }, [game.trackUri, game.attemptNumber, play, isPlaying]);
 
   const handleGuess = useCallback(
     async (guess: string) => {
       if (!game.roundId || !accessToken) return;
       const result = await submitGuess(game.roundId, guess, accessToken);
       game.addGuess({ text: guess, isSkip: false, isCorrect: result.correct });
+      stopPlayback();
       if (result.correct && result.answer) {
         game.setWon(result.answer);
         onWin(result.attemptNumber);
@@ -45,28 +85,31 @@ export function GameBoard({ playlist, onNewPlaylist }: Props) {
         onLoss();
       }
     },
-    [game.roundId, accessToken, onWin, onLoss]
+    [game.roundId, accessToken, onWin, onLoss, stopPlayback]
   );
 
   const handleSkip = useCallback(async () => {
     if (!game.roundId || !accessToken) return;
     const result = await skipGuess(game.roundId, accessToken);
     game.addGuess({ text: '', isSkip: true, isCorrect: false });
+    stopPlayback();
     if (result.gameOver && result.answer) {
       game.setLost(result.answer);
       onLoss();
     }
-  }, [game.roundId, accessToken, onLoss]);
+  }, [game.roundId, accessToken, onLoss, stopPlayback]);
 
   const handlePlayAgain = useCallback(() => {
+    stopPlayback();
     game.reset();
     handleStartRound();
-  }, [handleStartRound]);
+  }, [handleStartRound, stopPlayback]);
 
   const handleNewPlaylist = useCallback(() => {
+    stopPlayback();
     game.reset();
     onNewPlaylist();
-  }, [onNewPlaylist]);
+  }, [onNewPlaylist, stopPlayback]);
 
   if (playerError) {
     return (
@@ -119,13 +162,15 @@ export function GameBoard({ playlist, onNewPlaylist }: Props) {
       <AttemptIndicator
         guesses={game.guesses}
         currentAttempt={game.attemptNumber}
+        progress={progress}
+        isPlaying={isPlaying}
       />
 
       <AudioPlayer
-        clipDuration={game.currentClipDuration()}
         onPlay={handlePlay}
         disabled={game.status !== 'playing'}
         isConnecting={isConnecting}
+        isPlaying={isPlaying}
       />
 
       {game.status === 'playing' && (
