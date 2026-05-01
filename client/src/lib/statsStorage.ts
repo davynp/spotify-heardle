@@ -38,3 +38,33 @@ export function recordLoss() {
   stats.currentStreak = 0;
   saveStats(stats);
 }
+
+// --- Recent Playlists ---
+
+export interface SavedPlaylist {
+  id: string;
+  name: string;
+  imageUrl: string | null;
+  owner: string;
+}
+
+const PLAYLISTS_KEY = 'spotify-heardle-playlists';
+const MAX_RECENT = 10;
+
+export function getRecentPlaylists(): SavedPlaylist[] {
+  const raw = localStorage.getItem(PLAYLISTS_KEY);
+  if (!raw) return [];
+  return JSON.parse(raw);
+}
+
+export function saveRecentPlaylist(playlist: SavedPlaylist) {
+  const list = getRecentPlaylists().filter((p) => p.id !== playlist.id);
+  list.unshift(playlist);
+  if (list.length > MAX_RECENT) list.length = MAX_RECENT;
+  localStorage.setItem(PLAYLISTS_KEY, JSON.stringify(list));
+}
+
+export function removeRecentPlaylist(id: string) {
+  const list = getRecentPlaylists().filter((p) => p.id !== id);
+  localStorage.setItem(PLAYLISTS_KEY, JSON.stringify(list));
+}
